@@ -3,6 +3,7 @@
 namespace Dedoc\Scramble\Support;
 
 use Closure;
+use Dedoc\Scramble\Contracts\RouteContract;
 use Dedoc\Scramble\Infer;
 use Dedoc\Scramble\Infer\Reflector\ClosureReflector;
 use Dedoc\Scramble\Infer\Reflector\MethodReflector;
@@ -40,6 +41,9 @@ class RouteInfo
 
     public readonly Infer\Extensions\IndexBuildingBroker $indexBuildingBroker;
 
+    /** @var Route|RouteContract */
+    private $routeAdapter;
+
     public function __construct(
         public readonly Route $route,
         private Infer $infer, // @phpstan-ignore property.onlyWritten
@@ -48,15 +52,67 @@ class RouteInfo
         $bag = new Bag;
         $this->requestParametersFromCalls = $bag;
         $this->indexBuildingBroker = app(Infer\Extensions\IndexBuildingBroker::class);
+
+        // Create route adapter if needed (for future Symfony support)
+        $this->routeAdapter = RouteAdapterFactory::isSupported($route)
+            ? RouteAdapterFactory::create($route)
+            : $route;
+    }
+
+    /**
+     * Create RouteInfo from a RouteContract (for Symfony support).
+     */
+    public static function fromRouteContract(RouteContract $routeContract, Infer $infer): self
+    {
+        // For Laravel routes, use the original constructor
+        if ($routeContract->getFramework() === 'laravel' && $routeContract->getOriginalRoute() instanceof Route) {
+            return new self($routeContract->getOriginalRoute(), $infer);
+        }
+
+        // For other frameworks, we need a different approach
+        // Create a minimal wrapper that satisfies the Route type requirement
+        // but delegates to the RouteContract adapter
+        $instance = new self(
+            $routeContract->getOriginalRoute() instanceof Route
+                ? $routeContract->getOriginalRoute()
+                : self::createDummyLaravelRoute(),
+            $infer
+        );
+        $instance->routeAdapter = $routeContract;
+
+        return $instance;
+    }
+
+    private static function createDummyLaravelRoute(): Route
+    {
+        // This is used only as a fallback for non-Laravel routes
+        // The actual route information will be accessed through routeAdapter
+        return new Route(['GET'], '/', fn () => null);
+    }
+
+    /**
+     * Get the route adapter (works with both Laravel and Symfony routes).
+     */
+    protected function getRouteAdapter(): Route|RouteContract
+    {
+        return $this->routeAdapter;
     }
 
     public function isClassBased(): bool
     {
+        if ($this->routeAdapter instanceof RouteContract) {
+            return $this->routeAdapter->isClassBased();
+        }
+
         return is_string($this->route->getAction('uses'));
     }
 
     public function className(): ?string
     {
+        if ($this->routeAdapter instanceof RouteContract) {
+            return $this->routeAdapter->getControllerClass();
+        }
+
         return $this->isClassBased()
             ? ltrim(explode('@', $this->route->getAction('uses'))[0], '\\')
             : null;
@@ -64,6 +120,10 @@ class RouteInfo
 
     public function methodName(): ?string
     {
+        if ($this->routeAdapter instanceof RouteContract) {
+            return $this->routeAdapter->getControllerMethod();
+        }
+
         return $this->isClassBased()
             ? explode('@', $this->route->getAction('uses'))[1]
             : null;
@@ -124,7 +184,9 @@ class RouteInfo
             return null;
         }
 
-        $uses = $this->route->getAction('uses');
+        $uses = $this->routeAdapter instanceof RouteContract
+            ? $this->routeAdapter->getAction()
+            : $this->route->getAction('uses');
 
         if (! $uses instanceof Closure) {
             return null;
@@ -159,11 +221,22 @@ class RouteInfo
     public function getActionReflector(): MethodReflector|ClosureReflector
     {
         if ($this->isClassBased()) {
-            return MethodReflector::make(...explode('@', $this->route->getAction('uses')));
+            $className = $this->className();
+            $methodName = $this->methodName();
+
+            if ($className && $methodName) {
+                return MethodReflector::make($className, $methodName);
+            }
+
+            throw new LogicException('Cannot determine class and method names for action reflector');
         }
 
-        if ($this->route->getAction('uses') instanceof Closure) {
-            return ClosureReflector::make($this->route->getAction('uses'));
+        $uses = $this->routeAdapter instanceof RouteContract
+            ? $this->routeAdapter->getAction()
+            : $this->route->getAction('uses');
+
+        if ($uses instanceof Closure) {
+            return ClosureReflector::make($uses);
         }
 
         throw new LogicException('Cannot determine the action reflector');
