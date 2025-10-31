@@ -1,34 +1,35 @@
 <?php
 
-namespace Dedoc\Scramble\Support;
+declare(strict_types=1);
 
-use Dedoc\Scramble\Adapters\SymfonyRouteAdapter;
-use Dedoc\Scramble\Contracts\RouteContract;
+namespace Dedoc\Scramble;
+
 use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 use Symfony\Component\Routing\Router;
 
 /**
- * Symfony Route Collector
+ * Symfony Route Provider
  *
- * Collects and converts Symfony routes to RouteContract instances.
+ * Collects routes from Symfony's routing system for documentation generation.
  */
-class SymfonyRouteCollector
+class RouteProvider
 {
     public function __construct(
         private ?Router $router = null
-    ) {}
+    ) {
+    }
 
     /**
      * Get all routes from Symfony router.
      *
-     * @return array<int, RouteContract>
+     * @return array<string, Route>
      */
     public function getRoutes(?RouteCollection $routeCollection = null): array
     {
         $collection = $routeCollection ?? $this->router?->getRouteCollection();
 
-        if (! $collection) {
+        if (!$collection) {
             return [];
         }
 
@@ -40,7 +41,7 @@ class SymfonyRouteCollector
                 continue;
             }
 
-            $routes[] = new SymfonyRouteAdapter($route, $routeName);
+            $routes[$routeName] = $route;
         }
 
         return $routes;
@@ -73,7 +74,7 @@ class SymfonyRouteCollector
     }
 
     /**
-     * Create a collector instance from a router.
+     * Create a provider instance from a router.
      */
     public static function fromRouter(Router $router): self
     {
@@ -81,12 +82,12 @@ class SymfonyRouteCollector
     }
 
     /**
-     * Create a collector instance from a route collection.
+     * Create a provider instance from a route collection.
      */
     public static function fromRouteCollection(RouteCollection $routeCollection): self
     {
-        $collector = new self;
+        $provider = new self();
 
-        return $collector;
+        return $provider;
     }
 }

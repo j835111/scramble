@@ -1,72 +1,72 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Dedoc\Scramble\Reflection;
 
-use Dedoc\Scramble\Contracts\RouteContract;
 use Illuminate\Support\Str;
 use ReflectionNamedType;
 use ReflectionParameter;
+use Symfony\Component\Routing\Route;
 use WeakMap;
 
 /**
- * Symfony Route Reflection Handler
+ * Route Reflection Handler
  *
- * Provides reflection capabilities for Symfony routes, similar to ReflectionRoute for Laravel.
+ * Provides reflection capabilities for Symfony routes.
  *
  * @internal
  */
-class SymfonyReflectionRoute
+class RouteReflection
 {
-    /** @var WeakMap<object, self> */
+    /** @var WeakMap<Route, self> */
     private static WeakMap $cache;
 
-    private function __construct(private RouteContract $route) {}
-
-    public static function createFromRoute(RouteContract $route): self
+    private function __construct(private Route $route)
     {
-        if (! isset(self::$cache)) {
-            self::$cache = new WeakMap;
+    }
+
+    public static function createFromRoute(Route $route): self
+    {
+        if (!isset(self::$cache)) {
+            self::$cache = new WeakMap();
         }
 
-        $originalRoute = $route->getOriginalRoute();
-
-        if (! isset(self::$cache[$originalRoute])) {
-            self::$cache[$originalRoute] = new self($route);
+        if (!isset(self::$cache[$route])) {
+            self::$cache[$route] = new self($route);
         }
 
-        return self::$cache[$originalRoute];
+        return self::$cache[$route];
     }
 
     /**
      * Get the mapping of route parameter names to method parameter names.
      *
-     * For Symfony routes like /users/{userId}/posts/{postId} with method:
+     * For routes like /users/{userId}/posts/{postId} with method:
      * `public function show(Request $request, string $userId, string $postId)`,
      * returns ['userId' => 'userId', 'postId' => 'postId']
      *
      * @return array<string, string>
      */
-    public function getSignatureParametersMap(): array
+    public function getSignatureParametersMap(array $signatureParameters): array
     {
-        $paramNames = $this->route->getParameterNames();
-        $boundParamTypes = $this->getBoundParametersTypes();
+        $paramNames = $this->getParameterNames();
+        $boundParamTypes = $this->getBoundParametersTypes($signatureParameters);
 
-        // Get signature parameters (method parameters)
-        $signatureParameters = $this->route->getSignatureParameters();
-
+        $checkingParameters = $signatureParameters;
         $paramsToSignatureParametersNameMap = collect($paramNames)
-            ->mapWithKeys(function ($name) use ($boundParamTypes, &$signatureParameters) {
+            ->mapWithKeys(function ($name) use ($boundParamTypes, &$checkingParameters) {
                 $boundParamType = $boundParamTypes[$name];
 
                 // Find matching parameter from method signature
-                $mappedParameterReflection = collect($signatureParameters)
+                $mappedParameterReflection = collect($checkingParameters)
                     ->first(function (ReflectionParameter $rp) use ($boundParamType, $name) {
                         $type = $rp->getType();
 
                         // Match by name first (exact or snake_case conversion)
                         if ($rp->name === $name || Str::snake($rp->name) === $name) {
                             // If builtin type or no bound type constraint, match by name
-                            if (! $type instanceof ReflectionNamedType || $type->isBuiltin() || ! $boundParamType) {
+                            if (!$type instanceof ReflectionNamedType || $type->isBuiltin() || !$boundParamType) {
                                 return true;
                             }
 
@@ -81,8 +81,8 @@ class SymfonyReflectionRoute
 
                 if ($mappedParameterReflection) {
                     // Remove matched parameter from available list
-                    $signatureParameters = array_filter(
-                        $signatureParameters,
+                    $checkingParameters = array_filter(
+                        $checkingParameters,
                         fn ($v) => $v !== $mappedParameterReflection
                     );
                 }
@@ -100,17 +100,12 @@ class SymfonyReflectionRoute
     /**
      * Get bound parameter types.
      *
-     * For Symfony, this includes:
-     * - Entity parameters (via ParamConverter or route requirements)
-     * - Enum parameters (backed enums)
-     * - Custom route requirements with type hints
-     *
+     * @param  array<int, ReflectionParameter>  $signatureParameters
      * @return array<string, string|null>
      */
-    public function getBoundParametersTypes(): array
+    public function getBoundParametersTypes(array $signatureParameters): array
     {
-        $paramNames = $this->route->getParameterNames();
-        $signatureParameters = $this->route->getSignatureParameters();
+        $paramNames = $this->getParameterNames();
 
         return collect($paramNames)
             ->mapWithKeys(function ($name) use ($signatureParameters) {
@@ -119,18 +114,32 @@ class SymfonyReflectionRoute
                     fn (ReflectionParameter $p) => $p->name === $name || Str::snake($p->name) === $name
                 );
 
-                if (! $methodParam) {
+                if (!$methodParam) {
                     return [$name => null];
                 }
 
                 $type = $methodParam->getType();
 
-                if (! $type instanceof ReflectionNamedType || $type->isBuiltin()) {
+                if (!$type instanceof ReflectionNamedType || $type->isBuiltin()) {
                     return [$name => null];
                 }
 
                 return [$name => $type->getName()];
             })
             ->all();
+    }
+
+    /**
+     * Get route parameter names from path.
+     *
+     * @return array<int, string>
+     */
+    private function getParameterNames(): array
+    {
+        $path = $this->route->getPath();
+
+        preg_match_all('/\{([^}?]+)(?:\?|\})/i', $path, $matches);
+
+        return $matches[1];
     }
 }
