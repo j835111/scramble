@@ -3,8 +3,9 @@
 namespace Dedoc\Scramble\Support\Generator;
 
 use Dedoc\Scramble\Exceptions\OpenApiReferenceTargetNotFoundException;
-use Illuminate\Support\Str;
+use Doctrine\Common\Collections\ArrayCollection;
 use InvalidArgumentException;
+use Symfony\Component\String\UnicodeString;
 
 class Components
 {
@@ -54,25 +55,25 @@ class Components
         $result = [];
 
         if (count($this->securitySchemes)) {
-            $result['securitySchemes'] = collect($this->securitySchemes)
+            $result['securitySchemes'] = (new ArrayCollection($this->securitySchemes))
                 ->map(fn (SecurityScheme $s) => $s->toArray())
                 ->toArray();
         }
 
         if (count($this->schemas)) {
-            $result['schemas'] = collect($this->schemas)
-                ->mapWithKeys(function (Schema $s, string $fullName) {
+            $result['schemas'] = (new ArrayCollection($this->schemas))
+                ->mapWithKeys(function (string $fullName, Schema $s) {
                     return [
                         $this->uniqueSchemaName($fullName) => $s->setTitle($this->uniqueSchemaName($fullName))->toArray(),
                     ];
                 })
-                ->sortKeys()
+                ->ksort()
                 ->toArray();
         }
 
         if (count($this->responses)) {
-            $result['responses'] = collect($this->responses)
-                ->mapWithKeys(function (Response $r, string $fullName) {
+            $result['responses'] = (new ArrayCollection($this->responses))
+                ->mapWithKeys(function (string $fullName, Response $r) {
                     return [
                         $this->uniqueSchemaName($fullName) => $r->toArray(),
                     ];
@@ -88,7 +89,8 @@ class Components
      */
     public function uniqueSchemaName(string $fullName)
     {
-        $shortestPossibleName = class_basename($fullName);
+        $classNameParts = explode('\\', $fullName);
+        $shortestPossibleName = end($classNameParts);
 
         if (
             ($this->tempNames[$shortestPossibleName] ?? null) === null
@@ -119,7 +121,7 @@ class Components
      */
     public static function slug(string $name)
     {
-        return Str::replace('\\', '.', $name);
+        return (new UnicodeString($name))->replace('\\', '.')->__toString();
     }
 
     public function has(Reference $reference): bool

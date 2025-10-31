@@ -1,0 +1,9 @@
+scramble.docs.ui:
+    path: /docs/api
+    methods: [GET]
+    controller: Dedoc\Scramble\Http\Controllers\DocsController::ui
+
+scramble.docs.json:
+    path: /docs/api.json
+    methods: [GET]
+    controller: Dedoc\Scramble\Http\Controllers\DocsController::json
