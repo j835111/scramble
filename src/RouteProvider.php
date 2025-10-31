@@ -53,20 +53,20 @@ class RouteProvider
     private function isInternalRoute(string $routeName): bool
     {
         // Skip profiler routes
-        if (str_starts_with($routeName, '_wdt')) {
+        if (\str_starts_with($routeName, '_wdt')) {
             return true;
         }
 
-        if (str_starts_with($routeName, '_profiler')) {
+        if (\str_starts_with($routeName, '_profiler')) {
             return true;
         }
 
-        if (str_starts_with($routeName, '_preview_error')) {
+        if (\str_starts_with($routeName, '_preview_error')) {
             return true;
         }
 
         // Skip other framework routes
-        if (str_starts_with($routeName, '_')) {
+        if (\str_starts_with($routeName, '_')) {
             return true;
         }
 

@@ -4,11 +4,7 @@ declare(strict_types=1);
 
 namespace Dedoc\Scramble\Reflection;
 
-use Illuminate\Support\Str;
-use ReflectionNamedType;
-use ReflectionParameter;
 use Symfony\Component\Routing\Route;
-use WeakMap;
 
 /**
  * Route Reflection Handler
@@ -19,8 +15,8 @@ use WeakMap;
  */
 class RouteReflection
 {
-    /** @var WeakMap<Route, self> */
-    private static WeakMap $cache;
+    /** @var \WeakMap<Route, self> */
+    private static \WeakMap $cache;
 
     private function __construct(private Route $route)
     {
@@ -29,7 +25,7 @@ class RouteReflection
     public static function createFromRoute(Route $route): self
     {
         if (!isset(self::$cache)) {
-            self::$cache = new WeakMap();
+            self::$cache = new \WeakMap();
         }
 
         if (!isset(self::$cache[$route])) {
@@ -46,87 +42,100 @@ class RouteReflection
      * `public function show(Request $request, string $userId, string $postId)`,
      * returns ['userId' => 'userId', 'postId' => 'postId']
      *
+     * @param array<int, \ReflectionParameter> $signatureParameters
      * @return array<string, string>
      */
     public function getSignatureParametersMap(array $signatureParameters): array
     {
-        $paramNames = $this->getParameterNames();
+        $paramNames      = $this->getParameterNames();
         $boundParamTypes = $this->getBoundParametersTypes($signatureParameters);
 
-        $checkingParameters = $signatureParameters;
-        $paramsToSignatureParametersNameMap = collect($paramNames)
-            ->mapWithKeys(function ($name) use ($boundParamTypes, &$checkingParameters) {
-                $boundParamType = $boundParamTypes[$name];
+        $checkingParameters                 = $signatureParameters;
+        $paramsToSignatureParametersNameMap = [];
 
-                // Find matching parameter from method signature
-                $mappedParameterReflection = collect($checkingParameters)
-                    ->first(function (ReflectionParameter $rp) use ($boundParamType, $name) {
-                        $type = $rp->getType();
+        foreach ($paramNames as $name) {
+            $boundParamType = $boundParamTypes[$name];
 
-                        // Match by name first (exact or snake_case conversion)
-                        if ($rp->name === $name || Str::snake($rp->name) === $name) {
-                            // If builtin type or no bound type constraint, match by name
-                            if (!$type instanceof ReflectionNamedType || $type->isBuiltin() || !$boundParamType) {
-                                return true;
-                            }
+            // Find matching parameter from method signature
+            $mappedParameterReflection = null;
+            foreach ($checkingParameters as $rp) {
+                $type = $rp->getType();
 
-                            // If there's a type constraint, verify it matches
-                            $className = $type->getName();
+                // Match by name first (exact or snake_case conversion)
+                if ($rp->name === $name || $this->toSnakeCase($rp->name) === $name) {
+                    // If builtin type or no bound type constraint, match by name
+                    if (!$type instanceof \ReflectionNamedType || $type->isBuiltin() || !$boundParamType) {
+                        $mappedParameterReflection = $rp;
+                        break;
+                    }
 
-                            return is_a($boundParamType, $className, true);
-                        }
+                    // If there's a type constraint, verify it matches
+                    $className = $type->getName();
 
-                        return false;
-                    });
-
-                if ($mappedParameterReflection) {
-                    // Remove matched parameter from available list
-                    $checkingParameters = array_filter(
-                        $checkingParameters,
-                        fn ($v) => $v !== $mappedParameterReflection
-                    );
+                    if (\is_a($boundParamType, $className, true)) {
+                        $mappedParameterReflection = $rp;
+                        break;
+                    }
                 }
+            }
 
-                return [$name => $mappedParameterReflection];
-            });
+            if ($mappedParameterReflection) {
+                // Remove matched parameter from available list
+                $checkingParameters = \array_filter(
+                    $checkingParameters,
+                    fn ($v) => $v !== $mappedParameterReflection
+                );
+            }
 
-        return $paramsToSignatureParametersNameMap
-            ->mapWithKeys(fn (?ReflectionParameter $reflectionParameter, $name) => [
-                $name => $reflectionParameter?->name ?: $name,
-            ])
-            ->all();
+            $paramsToSignatureParametersNameMap[$name] = $mappedParameterReflection;
+        }
+
+        // Map to parameter names
+        $result = [];
+        foreach ($paramsToSignatureParametersNameMap as $name => $reflectionParameter) {
+            $result[$name] = $reflectionParameter?->name ?: $name;
+        }
+
+        return $result;
     }
 
     /**
      * Get bound parameter types.
      *
-     * @param  array<int, ReflectionParameter>  $signatureParameters
+     * @param array<int, \ReflectionParameter> $signatureParameters
      * @return array<string, string|null>
      */
     public function getBoundParametersTypes(array $signatureParameters): array
     {
         $paramNames = $this->getParameterNames();
+        $result     = [];
 
-        return collect($paramNames)
-            ->mapWithKeys(function ($name) use ($signatureParameters) {
-                // Find corresponding method parameter
-                $methodParam = collect($signatureParameters)->first(
-                    fn (ReflectionParameter $p) => $p->name === $name || Str::snake($p->name) === $name
-                );
-
-                if (!$methodParam) {
-                    return [$name => null];
+        foreach ($paramNames as $name) {
+            // Find corresponding method parameter
+            $methodParam = null;
+            foreach ($signatureParameters as $p) {
+                if ($p->name === $name || $this->toSnakeCase($p->name) === $name) {
+                    $methodParam = $p;
+                    break;
                 }
+            }
 
-                $type = $methodParam->getType();
+            if (!$methodParam) {
+                $result[$name] = null;
+                continue;
+            }
 
-                if (!$type instanceof ReflectionNamedType || $type->isBuiltin()) {
-                    return [$name => null];
-                }
+            $type = $methodParam->getType();
 
-                return [$name => $type->getName()];
-            })
-            ->all();
+            if (!$type instanceof \ReflectionNamedType || $type->isBuiltin()) {
+                $result[$name] = null;
+                continue;
+            }
+
+            $result[$name] = $type->getName();
+        }
+
+        return $result;
     }
 
     /**
@@ -138,8 +147,21 @@ class RouteReflection
     {
         $path = $this->route->getPath();
 
-        preg_match_all('/\{([^}?]+)(?:\?|\})/i', $path, $matches);
+        \preg_match_all('/\{([^}?]+)(?:\?|\})/i', $path, $matches);
 
         return $matches[1];
+    }
+
+    /**
+     * Convert a string to snake_case.
+     */
+    private function toSnakeCase(string $value): string
+    {
+        if (!\ctype_lower($value)) {
+            $value = \preg_replace('/\s+/u', '', \ucwords($value)) ?? $value;
+            $value = \strtolower(\preg_replace('/(.)(?=[A-Z])/u', '$1_', $value) ?? $value);
+        }
+
+        return $value;
     }
 }

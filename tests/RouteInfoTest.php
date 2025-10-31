@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Dedoc\Scramble\Tests;
 
-use Dedoc\Scramble\Infer;
 use Dedoc\Scramble\RouteInfo;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Routing\Route;
@@ -15,8 +14,6 @@ class TestController
      * Show user details
      *
      * @param int $id User ID
-     *
-     * @return array
      */
     public function show(int $id): array
     {
@@ -36,19 +33,12 @@ class TestController
 
 class RouteInfoTest extends TestCase
 {
-    private Infer $infer;
-
-    protected function setUp(): void
-    {
-        $this->infer = new Infer();
-    }
-
     public function testIdentifiesClassBasedRoutes(): void
     {
         $route = new Route('/users/{id}');
-        $route->setDefault('_controller', TestController::class.'::show');
+        $route->setDefault('_controller', TestController::class . '::show');
 
-        $routeInfo = new RouteInfo($route, 'users.show', $this->infer);
+        $routeInfo = new RouteInfo($route, 'users.show');
 
         $this->assertTrue($routeInfo->isClassBased());
         $this->assertEquals(TestController::class, $routeInfo->className());
@@ -60,7 +50,7 @@ class RouteInfoTest extends TestCase
         $route = new Route('/users');
         $route->setDefault('_controller', TestController::class);
 
-        $routeInfo = new RouteInfo($route, 'users', $this->infer);
+        $routeInfo = new RouteInfo($route, 'users');
 
         $this->assertTrue($routeInfo->isClassBased());
         $this->assertEquals(TestController::class, $routeInfo->className());
@@ -71,7 +61,7 @@ class RouteInfoTest extends TestCase
     {
         $route = new Route('/users', methods: ['GET', 'POST']);
 
-        $routeInfo = new RouteInfo($route, 'users', $this->infer);
+        $routeInfo = new RouteInfo($route, 'users');
 
         $methods = $routeInfo->getMethods();
         $this->assertContains('GET', $methods);
@@ -82,7 +72,7 @@ class RouteInfoTest extends TestCase
     {
         $route = new Route('/users/{id}/posts/{postId}');
 
-        $routeInfo = new RouteInfo($route, 'test', $this->infer);
+        $routeInfo = new RouteInfo($route, 'test');
 
         $this->assertEquals('/users/{id}/posts/{postId}', $routeInfo->getPath());
     }
@@ -91,7 +81,7 @@ class RouteInfoTest extends TestCase
     {
         $route = new Route('/users/{userId}/posts/{postId}');
 
-        $routeInfo = new RouteInfo($route, 'test', $this->infer);
+        $routeInfo = new RouteInfo($route, 'test');
 
         $params = $routeInfo->getParameterNames();
         $this->assertEquals(['userId', 'postId'], $params);
@@ -100,9 +90,9 @@ class RouteInfoTest extends TestCase
     public function testGetsReflectionMethod(): void
     {
         $route = new Route('/users/{id}');
-        $route->setDefault('_controller', TestController::class.'::show');
+        $route->setDefault('_controller', TestController::class . '::show');
 
-        $routeInfo = new RouteInfo($route, 'users.show', $this->infer);
+        $routeInfo = new RouteInfo($route, 'users.show');
 
         $reflection = $routeInfo->reflectionMethod();
 
