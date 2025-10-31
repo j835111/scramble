@@ -90,7 +90,7 @@ class SymfonyRouteAdapter implements RouteContract
     {
         $action = $this->getAction();
 
-        return is_string($action) && ! $action instanceof Closure;
+        return is_string($action);
     }
 
     public function getControllerClass(): ?string
@@ -152,7 +152,7 @@ class SymfonyRouteAdapter implements RouteContract
         // Example: /users/{id}/posts/{postId} -> ['id', 'postId']
         preg_match_all('/\{([^}?]+)(?:\?|\})/i', $path, $matches);
 
-        return $matches[1] ?? [];
+        return $matches[1];
     }
 
     public function getName(): ?string
@@ -184,11 +184,15 @@ class SymfonyRouteAdapter implements RouteContract
         return array_filter($parameters, function ($parameter) use ($subClass) {
             $type = $parameter->getType();
 
-            if (! $type || $type->isBuiltin()) {
+            if (! $type instanceof \ReflectionNamedType) {
                 return false;
             }
 
-            $typeName = $type instanceof \ReflectionNamedType ? $type->getName() : null;
+            if ($type->isBuiltin()) {
+                return false;
+            }
+
+            $typeName = $type->getName();
 
             if (! $typeName) {
                 return false;

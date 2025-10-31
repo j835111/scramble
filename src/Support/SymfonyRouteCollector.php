@@ -35,10 +35,6 @@ class SymfonyRouteCollector
         $routes = [];
 
         foreach ($collection->all() as $routeName => $route) {
-            if (! $route instanceof Route) {
-                continue;
-            }
-
             // Skip internal Symfony routes
             if ($this->isInternalRoute($routeName)) {
                 continue;

@@ -17,17 +17,24 @@ use WeakMap;
  */
 class SymfonyReflectionRoute
 {
+    /** @var WeakMap<object, self> */
     private static WeakMap $cache;
 
     private function __construct(private RouteContract $route) {}
 
-    public static function createFromRoute(RouteContract $route): static
+    public static function createFromRoute(RouteContract $route): self
     {
-        static::$cache ??= new WeakMap;
+        if (! isset(self::$cache)) {
+            self::$cache = new WeakMap;
+        }
 
         $originalRoute = $route->getOriginalRoute();
 
-        return static::$cache[$originalRoute] ??= new static($route);
+        if (! isset(self::$cache[$originalRoute])) {
+            self::$cache[$originalRoute] = new self($route);
+        }
+
+        return self::$cache[$originalRoute];
     }
 
     /**
