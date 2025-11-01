@@ -8,6 +8,7 @@ use Dedoc\Scramble\RouteProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
+use Symfony\Component\Routing\Router;
 
 class RouteProviderTest extends TestCase
 {
@@ -63,5 +64,42 @@ class RouteProviderTest extends TestCase
         $routes   = $provider->getRoutes($collection);
 
         $this->assertArrayHasKey('user.show', $routes);
+    }
+
+    public function testFromRouterCreatesProviderInstance(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add('api.users', new Route('/api/users'));
+        $collection->add('api.posts', new Route('/api/posts'));
+
+        $router   = $this->createMockRouter($collection);
+        $provider = RouteProvider::fromRouter($router);
+
+        $this->assertInstanceOf(RouteProvider::class, $provider);
+    }
+
+    public function testFromRouterGetsRoutesFromRouter(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add('api.users', new Route('/api/users'));
+        $collection->add('api.posts', new Route('/api/posts'));
+        $collection->add('_profiler', new Route('/_profiler'));
+
+        $router   = $this->createMockRouter($collection);
+        $provider = RouteProvider::fromRouter($router);
+        $routes   = $provider->getRoutes();
+
+        $this->assertCount(2, $routes, 'Should get routes from router and filter internal routes');
+        $this->assertArrayHasKey('api.users', $routes);
+        $this->assertArrayHasKey('api.posts', $routes);
+        $this->assertArrayNotHasKey('_profiler', $routes);
+    }
+
+    private function createMockRouter(RouteCollection $collection): Router
+    {
+        $router = $this->createMock(Router::class);
+        $router->method('getRouteCollection')->willReturn($collection);
+
+        return $router;
     }
 }
