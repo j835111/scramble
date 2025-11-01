@@ -5,7 +5,6 @@ namespace Dedoc\Scramble\Support\Generator;
 use Dedoc\Scramble\Support\Generator\Combined\AnyOf;
 use Dedoc\Scramble\Support\Generator\Types\NullType;
 use Dedoc\Scramble\Support\Generator\Types\Type;
-use Illuminate\Support\Str;
 
 class Reference extends Type
 {
@@ -48,7 +47,7 @@ class Reference extends Type
         $casesDescription = $this->getEnumReferenceCasesDescription();
 
         if ($description && $casesDescription) {
-            $description = Str::replaceLast($casesDescription, '', $description)."\n".$casesDescription;
+            $description = preg_replace('/'.preg_quote($casesDescription, '/').'$/', '', $description)."\n".$casesDescription;
         }
 
         return parent::setDescription($description);
